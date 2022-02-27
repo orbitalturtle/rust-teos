@@ -18,15 +18,15 @@ use bitcoincore_rpc::{
 pub(crate) struct DeliveryReceipt {
     /// Whether the [Transaction] has been accepted by the network.
     delivered: bool,
-    /// Whether the [Transaction] was already confirmed.
-    confirmations: Option<u32>,
+    /// The [Transaction] confirmation count. It may be greater than 0 if the transaction was already broadcasted by someone else.
+    confirmations: u32,
     /// Rejection reason. Only present if the [Transaction] is rejected.
     reason: Option<i32>,
 }
 
 impl DeliveryReceipt {
     /// Creates a new [DeliveryReceipt] instance.
-    pub fn new(delivered: bool, confirmations: Option<u32>, reason: Option<i32>) -> Self {
+    pub fn new(delivered: bool, confirmations: u32, reason: Option<i32>) -> Self {
         DeliveryReceipt {
             delivered,
             confirmations,
@@ -40,8 +40,8 @@ impl DeliveryReceipt {
     }
 
     /// Getter for [self.confirmations](Self::confirmations).
-    pub fn confirmations(&self) -> &Option<u32> {
-        &self.confirmations
+    pub fn confirmations(&self) -> u32 {
+        self.confirmations
     }
 
     /// Getter for [self.reason](Self::reason).
@@ -116,18 +116,17 @@ impl Carrier {
         match self.bitcoin_cli.send_raw_transaction(tx) {
             Ok(_) => {
                 log::info!("Transaction successfully delivered: {}", tx.txid());
-                receipt = DeliveryReceipt::new(true, Some(0), None);
+                receipt = DeliveryReceipt::new(true, 0, None);
             }
             Err(JsonRpcError(RpcError(rpcerr))) => match rpcerr.code {
                 // Since we're pushing a raw transaction to the network we can face several rejections
                 rpc_errors::RPC_VERIFY_REJECTED => {
                     log::error!("Transaction couldn't be broadcast. {:?}", rpcerr);
-                    receipt =
-                        DeliveryReceipt::new(false, None, Some(rpc_errors::RPC_VERIFY_REJECTED))
+                    receipt = DeliveryReceipt::new(false, 0, Some(rpc_errors::RPC_VERIFY_REJECTED))
                 }
                 rpc_errors::RPC_VERIFY_ERROR => {
                     log::error!("Transaction couldn't be broadcast. {:?}", rpcerr);
-                    receipt = DeliveryReceipt::new(false, None, Some(rpc_errors::RPC_VERIFY_ERROR))
+                    receipt = DeliveryReceipt::new(false, 0, Some(rpc_errors::RPC_VERIFY_ERROR))
                 }
                 rpc_errors::RPC_VERIFY_ALREADY_IN_CHAIN => {
                     log::info!(
@@ -135,17 +134,18 @@ impl Carrier {
                         tx.txid()
                     );
 
-                    receipt = DeliveryReceipt::new(true, self.get_confirmations(&tx.txid()), None)
+                    receipt = DeliveryReceipt::new(
+                        true,
+                        self.get_confirmations(&tx.txid()).unwrap(),
+                        None,
+                    )
                 }
                 rpc_errors::RPC_DESERIALIZATION_ERROR => {
                     // Adding this here just for completeness. We should never end up here. The Carrier only sends txs handed by the Responder,
                     // who receives them from the Watcher, who checks that the tx can be properly deserialized.
                     log::info!("Transaction cannot be deserialized: {}", tx.txid());
-                    receipt = DeliveryReceipt::new(
-                        false,
-                        None,
-                        Some(rpc_errors::RPC_DESERIALIZATION_ERROR),
-                    )
+                    receipt =
+                        DeliveryReceipt::new(false, 0, Some(rpc_errors::RPC_DESERIALIZATION_ERROR))
                 }
                 _ => {
                     // If something else happens (unlikely but possible) log it so we can treat it in future releases
@@ -154,7 +154,7 @@ impl Carrier {
                         rpcerr
                     );
                     receipt =
-                        DeliveryReceipt::new(false, None, Some(errors::UNKNOWN_JSON_RPC_EXCEPTION))
+                        DeliveryReceipt::new(false, 0, Some(errors::UNKNOWN_JSON_RPC_EXCEPTION))
                 }
             },
             Err(JsonRpcError(TransportError(_))) => {
@@ -166,7 +166,7 @@ impl Carrier {
             Err(e) => {
                 // TODO: This may need finer catching.
                 log::error!("Unexpected error when calling sendrawtransaction: {:?}", e);
-                receipt = DeliveryReceipt::new(false, None, None)
+                receipt = DeliveryReceipt::new(false, 0, None)
             }
         }
 
@@ -280,10 +280,9 @@ mod tests {
 
         // Lets add some dummy data into the cache
         for i in 0..10 {
-            carrier.issued_receipts.insert(
-                get_random_tx().txid(),
-                DeliveryReceipt::new(true, Some(i), None),
-            );
+            carrier
+                .issued_receipts
+                .insert(get_random_tx().txid(), DeliveryReceipt::new(true, i, None));
         }
 
         // Check it empties on request
@@ -304,7 +303,7 @@ mod tests {
         let r = carrier.send_transaction(&tx);
 
         assert!(r.delivered);
-        assert_eq!(r.confirmations, Some(0));
+        assert_eq!(r.confirmations, 0);
         assert_eq!(r.reason, None);
 
         // Check the receipt is on the cache
@@ -325,7 +324,7 @@ mod tests {
         let r = carrier.send_transaction(&tx);
 
         assert!(!r.delivered);
-        assert_eq!(r.confirmations, None);
+        assert_eq!(r.confirmations, 0);
         assert_eq!(r.reason, Some(rpc_errors::RPC_VERIFY_REJECTED));
 
         // Check the receipt is on the cache
@@ -345,7 +344,7 @@ mod tests {
         let r = carrier.send_transaction(&tx);
 
         assert!(!r.delivered);
-        assert_eq!(r.confirmations, None);
+        assert_eq!(r.confirmations, 0);
         assert_eq!(r.reason, Some(rpc_errors::RPC_VERIFY_ERROR));
 
         // Check the receipt is on the cache
@@ -368,7 +367,7 @@ mod tests {
         let r = carrier.send_transaction(&tx);
 
         assert!(r.delivered);
-        assert_eq!(r.confirmations, Some(expected_confirmations));
+        assert_eq!(r.confirmations, expected_confirmations);
         assert_eq!(r.reason, None);
 
         // Check the receipt is on the cache
@@ -388,7 +387,7 @@ mod tests {
         let r = carrier.send_transaction(&tx);
 
         assert!(!r.delivered);
-        assert_eq!(r.confirmations, None);
+        assert_eq!(r.confirmations, 0);
         assert_eq!(r.reason, Some(errors::UNKNOWN_JSON_RPC_EXCEPTION));
 
         // Check the receipt is on the cache

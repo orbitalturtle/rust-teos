@@ -796,7 +796,7 @@ mod tests_methods {
         let signature = cryptography::sign(&appointment.serialize(), &user_sk).unwrap();
         internal_api
             .get_watcher()
-            .add_random_tracker_to_responder(UUID::new(appointment.locator, UserId(user_pk)));
+            .add_random_tracker_to_responder(UUID::new(appointment.locator, UserId(user_pk)), 1);
 
         // Try to add it via the http API
         assert_eq!(

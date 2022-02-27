@@ -903,8 +903,8 @@ mod tests {
     impl Eq for Watcher {}
 
     impl Watcher {
-        pub(crate) fn add_random_tracker_to_responder(&self, uuid: UUID) {
-            self.responder.add_random_tracker(uuid);
+        pub(crate) fn add_random_tracker_to_responder(&self, uuid: UUID, confirmations: u32) {
+            self.responder.add_random_tracker(uuid, confirmations);
         }
     }
 
