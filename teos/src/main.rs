@@ -274,6 +274,9 @@ async fn main() {
         conf.subscription_duration,
         conf.expiry_delta,
         dbm.clone(),
+        // We'll make this boolean configurable later.
+        true,
+        path,
     ));
 
     let carrier = Carrier::new(rpc, bitcoind_reachable.clone(), tip.height);

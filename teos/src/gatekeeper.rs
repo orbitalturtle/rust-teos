@@ -2,6 +2,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -14,6 +15,7 @@ use teos_common::receipts::RegistrationReceipt;
 use teos_common::UserId;
 
 use crate::dbm::DBM;
+use crate::fees::{Cln, GetInvoice};
 use crate::extended_appointment::{ExtendedAppointment, UUID};
 
 /// Data regarding a user subscription with the tower.
@@ -78,7 +80,7 @@ pub(crate) struct MaxSlotsReached;
 /// This is the only component in the system that has some knowledge regarding users, all other components do query the
 /// [Gatekeeper] for such information.
 #[derive(Debug)]
-pub struct Gatekeeper {
+pub struct Gatekeeper<'a> {
     /// last known block header by the [Gatekeeper].
     last_known_block_height: AtomicU32,
     /// Number of slots new subscriptions get by default.
@@ -91,9 +93,11 @@ pub struct Gatekeeper {
     registered_users: Mutex<HashMap<UserId, UserInfo>>,
     /// A [DBM] (database manager) instance. Used to persist appointment data into disk.
     dbm: Arc<Mutex<DBM>>,
+    /// ADD NOTE HERE BOUT WHAT THIS IS
+    payment_client: Option<&'a impl GetInvoice>,
 }
 
-impl Gatekeeper {
+impl<'a> Gatekeeper<'a> {
     /// Creates a new [Gatekeeper] instance.
     pub fn new(
         last_known_block_height: u32,
@@ -101,7 +105,15 @@ impl Gatekeeper {
         subscription_duration: u32,
         expiry_delta: u32,
         dbm: Arc<Mutex<DBM>>,
+        // Eventually we could perhaps put these options into its own PayConfig?
+        paid: bool,
+        data_dir: PathBuf,
     ) -> Self {
+        let payment_client = None;
+        if paid {
+            payment_client = Cln::new(data_dir);
+        }
+
         let registered_users = dbm.lock().unwrap().load_all_users();
         Gatekeeper {
             last_known_block_height: AtomicU32::new(last_known_block_height),
@@ -110,6 +122,7 @@ impl Gatekeeper {
             expiry_delta,
             registered_users: Mutex::new(registered_users),
             dbm,
+            payment_client,
         }
     }
 
@@ -311,7 +324,7 @@ impl Gatekeeper {
     }
 }
 
-impl chain::Listen for Gatekeeper {
+impl chain::Listen for Gatekeeper<'a> {
     /// Handles the monitoring process by the [Gatekeeper].
     ///
     /// This is mainly used to keep track of time and expire / outdate subscriptions when needed.

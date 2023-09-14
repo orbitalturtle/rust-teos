@@ -14,6 +14,7 @@ pub mod chain_monitor;
 pub mod cli_config;
 pub mod config;
 pub mod dbm;
+mod fees;
 #[doc(hidden)]
 mod errors;
 mod extended_appointment;
