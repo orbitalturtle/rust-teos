@@ -275,8 +275,8 @@ async fn main() {
         conf.expiry_delta,
         dbm.clone(),
         // We'll make this boolean configurable later.
-        true,
-        path,
+        //true,
+        //path,
     ));
 
     let carrier = Carrier::new(rpc, bitcoind_reachable.clone(), tip.height);
@@ -361,6 +361,7 @@ async fn main() {
         addresses,
         bitcoind_reachable.clone(),
         shutdown_trigger,
+        None,
     ));
     let internal_api_cloned = internal_api.clone();
 

@@ -1,5 +1,6 @@
 pub enum Endpoint {
     Register,
+    Pay,
     AddAppointment,
     GetAppointment,
     GetSubscriptionInfo,
@@ -13,6 +14,7 @@ impl std::fmt::Display for Endpoint {
             "{}",
             match self {
                 Endpoint::Register => "register",
+                Endpoint::Pay => "pay",
                 Endpoint::AddAppointment => "add_appointment",
                 Endpoint::GetAppointment => "get_appointment",
                 Endpoint::GetSubscriptionInfo => "get_subscription_info",

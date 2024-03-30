@@ -15,7 +15,7 @@ use teos_common::receipts::RegistrationReceipt;
 use teos_common::UserId;
 
 use crate::dbm::DBM;
-use crate::fees::{Cln, GetInvoice};
+//use crate::fees::{Cln, GetInvoice};
 use crate::extended_appointment::{ExtendedAppointment, UUID};
 
 /// Data regarding a user subscription with the tower.
@@ -80,7 +80,7 @@ pub(crate) struct MaxSlotsReached;
 /// This is the only component in the system that has some knowledge regarding users, all other components do query the
 /// [Gatekeeper] for such information.
 #[derive(Debug)]
-pub struct Gatekeeper<'a> {
+pub struct Gatekeeper {
     /// last known block header by the [Gatekeeper].
     last_known_block_height: AtomicU32,
     /// Number of slots new subscriptions get by default.
@@ -93,11 +93,11 @@ pub struct Gatekeeper<'a> {
     registered_users: Mutex<HashMap<UserId, UserInfo>>,
     /// A [DBM] (database manager) instance. Used to persist appointment data into disk.
     dbm: Arc<Mutex<DBM>>,
-    /// ADD NOTE HERE BOUT WHAT THIS IS
-    payment_client: Option<&'a impl GetInvoice>,
+    // ADD NOTE HERE BOUT WHAT THIS IS
+    //payment_client: Option<&'a impl GetInvoice>,
 }
 
-impl<'a> Gatekeeper<'a> {
+impl Gatekeeper {
     /// Creates a new [Gatekeeper] instance.
     pub fn new(
         last_known_block_height: u32,
@@ -106,13 +106,13 @@ impl<'a> Gatekeeper<'a> {
         expiry_delta: u32,
         dbm: Arc<Mutex<DBM>>,
         // Eventually we could perhaps put these options into its own PayConfig?
-        paid: bool,
-        data_dir: PathBuf,
+        //paid: bool,
+        //data_dir: PathBuf,
     ) -> Self {
-        let payment_client = None;
-        if paid {
-            payment_client = Cln::new(data_dir);
-        }
+        //let payment_client = None;
+        //if paid {
+        //    payment_client = Cln::new(data_dir);
+        //}
 
         let registered_users = dbm.lock().unwrap().load_all_users();
         Gatekeeper {
@@ -122,7 +122,7 @@ impl<'a> Gatekeeper<'a> {
             expiry_delta,
             registered_users: Mutex::new(registered_users),
             dbm,
-            payment_client,
+            //payment_client,
         }
     }
 
@@ -324,7 +324,7 @@ impl<'a> Gatekeeper<'a> {
     }
 }
 
-impl chain::Listen for Gatekeeper<'a> {
+impl chain::Listen for Gatekeeper {
     /// Handles the monitoring process by the [Gatekeeper].
     ///
     /// This is mainly used to keep track of time and expire / outdate subscriptions when needed.

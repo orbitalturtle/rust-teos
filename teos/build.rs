@@ -25,15 +25,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             &["proto/teos/v2", "../teos-common/proto/"],
         )?;
 
-    tonic_build::configure()
-        .build_server(false)
-        .compile(
-            &[
-                "proto/cln-grpc/node.proto",
-                "proto/cln-grpc/primitives.proto"
-            ],
-            &["proto/cln-grpc", "../teos-common/proto/"],
-        )?;
+    tonic_build::configure().build_server(false).compile(
+        &[
+            "proto/cln-grpc/node.proto",
+            "proto/cln-grpc/primitives.proto",
+        ],
+        &["proto/cln-grpc", "../teos-common/proto/"],
+    )?;
 
     Ok(())
 }

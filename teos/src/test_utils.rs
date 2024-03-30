@@ -8,6 +8,7 @@
 */
 
 use rand::Rng;
+use std::str::FromStr;
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 
@@ -34,6 +35,7 @@ use lightning_block_sync::poll::{
 use lightning_block_sync::{
     AsyncBlockSourceResult, BlockHeaderData, BlockSource, BlockSourceError, UnboundedCache,
 };
+use lightning_invoice::Bolt11Invoice;
 
 use teos_common::constants::IRREVOCABLY_RESOLVED;
 use teos_common::cryptography::{get_random_bytes, get_random_keypair};
@@ -44,6 +46,7 @@ use crate::api::internal::InternalAPI;
 use crate::carrier::Carrier;
 use crate::dbm::DBM;
 use crate::extended_appointment::{ExtendedAppointment, UUID};
+use crate::fees::ValidatePayment;
 use crate::gatekeeper::{Gatekeeper, UserInfo};
 use crate::protos as msgs;
 use crate::responder::{ConfirmationStatus, Responder, TransactionTracker};
@@ -440,14 +443,16 @@ pub(crate) struct ApiConfig {
     slots: u32,
     duration: u32,
     bitcoind_reachable: bool,
+    validator: bool,
 }
 
 impl ApiConfig {
-    pub fn new(slots: u32, duration: u32) -> Self {
+    pub fn new(slots: u32, duration: u32, validator: bool) -> Self {
         Self {
             slots,
             duration,
             bitcoind_reachable: true,
+            validator,
         }
     }
 
@@ -463,6 +468,7 @@ impl Default for ApiConfig {
             slots: SLOTS,
             duration: DURATION,
             bitcoind_reachable: true,
+            validator: false,
         }
     }
 }
@@ -492,6 +498,15 @@ pub(crate) async fn create_api_with_config(
     )
     .await;
 
+    let validator = if api_config.validator {
+        Some(Arc::new(Mutex::new(create_validator()))
+            as Arc<
+                Mutex<(dyn ValidatePayment + std::marker::Send + 'static)>,
+            >)
+    } else {
+        None
+    };
+
     let bitcoind_reachable = Arc::new((Mutex::new(api_config.bitcoind_reachable), Condvar::new()));
     let (shutdown_trigger, _) = triggered::trigger();
     (
@@ -500,6 +515,7 @@ pub(crate) async fn create_api_with_config(
             vec![msgs::NetworkAddress::from_ipv4("address".to_string(), 21)],
             bitcoind_reachable,
             shutdown_trigger,
+            validator,
         )),
         stopper,
     )
@@ -623,4 +639,33 @@ pub(crate) fn start_server(server: Server) {
     thread::spawn(move || {
         server.wait();
     });
+}
+
+pub(crate) fn get_test_bolt11_invoice() -> Bolt11Invoice {
+    Bolt11Invoice::from_str("lnbcrt1pj3epu0pp5mul7zsseuet76sus7zqtjfpwctjmsdaale3kgetm3hvea9lhzf0qdqqcqzzsxqyz5vqsp5vg3j64cthrg6gpnnpxj84r8jwvcfqkwq6rsuczk0xmr6h6pf790s9qyyssqqd2uceluw5h5kxphrs5juj9l8utcfrsgncm4ejjrc5a4uva9kzd93ydn4kkpf5235nv64rtr8hnvdymv0lcsahdcrw6x9rxlppgfmhspnmkgt5").unwrap()
+}
+
+pub(crate) struct MockPaymentValidator {
+    paid: bool,
+}
+
+impl ValidatePayment for MockPaymentValidator {
+    fn get_invoice(&self) -> Bolt11Invoice {
+        // RETURN A TEST INVOICE
+        get_test_bolt11_invoice()
+    }
+
+    fn validate(&self) -> bool {
+        self.paid
+    }
+}
+
+impl MockPaymentValidator {
+    fn set_paid(&mut self, paid: bool) {
+        self.paid = paid;
+    }
+}
+
+pub(crate) fn create_validator() -> MockPaymentValidator {
+    MockPaymentValidator { paid: true }
 }
